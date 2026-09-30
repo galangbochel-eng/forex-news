@@ -47,6 +47,7 @@ nav {
     border-bottom: 2px solid transparent;
     transition: all 0.2s;
     min-width: 100px;
+    white-space: nowrap;
 }
 
 .tab.active {
@@ -70,9 +71,17 @@ main {
     gap: 10px;
     margin-bottom: 20px;
     flex-wrap: wrap;
+    align-items: center;
 }
 
-select, input {
+.controls label {
+    font-size: 12px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+select, input[type="date"] {
     flex: 1;
     padding: 10px 12px;
     background: #16161f;
@@ -189,7 +198,7 @@ button:active { transform: scale(0.98); }
     width: 100%;
 }
 
-#analysis-result {
+#analysis-result, #daily-result, #news-result {
     background: #16161f;
     border: 1px solid #2a2a3a;
     border-radius: 10px;
@@ -222,12 +231,14 @@ button:active { transform: scale(0.98); }
     padding: 8px 0;
     border-bottom: 1px solid #1a1a2a;
     font-size: 13px;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 .analysis-row:last-child { border-bottom: none; }
 
 .analysis-row .label { color: #888; }
-.analysis-row .value { color: #fff; font-family: monospace; }
+.analysis-row .value { color: #fff; font-family: monospace; text-align: right; }
 
 .sentiment-bullish { color: #00b894 !important; }
 .sentiment-bearish { color: #e17055 !important; }
@@ -283,6 +294,7 @@ button:active { transform: scale(0.98); }
     border-radius: 8px;
     padding: 12px 16px;
     margin-bottom: 8px;
+    gap: 8px;
 }
 
 .watch-item .pair {
@@ -290,6 +302,7 @@ button:active { transform: scale(0.98); }
     font-size: 14px;
     color: #6c5ce7;
     font-weight: bold;
+    flex: 1;
 }
 
 .watch-item .price {
@@ -315,15 +328,38 @@ footer {
     font-size: 11px;
 }
 
-.loading {
-    text-align: center;
-    padding: 40px;
-    color: #666;
-}
-
 .empty {
     text-align: center;
     padding: 40px;
     color: #444;
     font-size: 13px;
+}
+
+.day-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.day-stat {
+    background: #0a0a0f;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+}
+
+.day-stat .label {
+    font-size: 10px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.day-stat .value {
+    font-size: 18px;
+    font-weight: bold;
+    font-family: monospace;
 }
