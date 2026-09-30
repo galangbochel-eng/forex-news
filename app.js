@@ -1,13 +1,12 @@
 // ============================================================
-// FOREX NEWS TRADER v2
+// FOREX NEWS TRADER v2 — with CORS proxy
 // ============================================================
 
 const state = {
     news: [],
     filteredNews: [],
     watchlist: JSON.parse(localStorage.getItem('watchlist') || '["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"]'),
-    prices: {},
-    selectedDate: new Date().toISOString().split('T')[0]
+    prices: {}
 };
 
 const API = {
@@ -17,16 +16,18 @@ const API = {
     forex: 'https://api.exchangerate.host/latest'
 };
 
+const PROXY = 'https://api.allorigins.win/raw?url=';
+
 // ============================================================
-// FETCH NEWS (3 minggu: last, this, next)
+// FETCH NEWS
 // ============================================================
 async function fetchNews() {
     setStatus('Fetching news...');
     try {
         const [thisWeek, lastWeek, nextWeek] = await Promise.all([
-            fetch(API.thisWeek).then(r => r.json()).catch(() => []),
-            fetch(API.lastWeek).then(r => r.json()).catch(() => []),
-            fetch(API.nextWeek).then(r => r.json()).catch(() => [])
+            fetch(PROXY + encodeURIComponent(API.thisWeek)).then(r => r.json()).catch(() => []),
+            fetch(PROXY + encodeURIComponent(API.lastWeek)).then(r => r.json()).catch(() => []),
+            fetch(PROXY + encodeURIComponent(API.nextWeek)).then(r => r.json()).catch(() => [])
         ]);
         
         const all = [...lastWeek, ...thisWeek, ...nextWeek];
@@ -49,9 +50,8 @@ async function fetchNews() {
         setStatus('✓ ' + state.news.length + ' news loaded');
         applyFilter();
         populateNewsSelect();
-        renderDailySummary();
     } catch (e) {
-        setStatus('✗ Error fetching news');
+        setStatus('✗ Error: ' + e.message);
         console.error(e);
     }
 }
@@ -61,7 +61,7 @@ async function fetchNews() {
 // ============================================================
 async function fetchPrices() {
     try {
-        const res = await fetch(API.forex + '?base=USD');
+        const res = await fetch(PROXY + encodeURIComponent(API.forex + '?base=USD'));
         const data = await res.json();
         const rates = data.rates || {};
         state.prices = {
@@ -120,9 +120,9 @@ function renderCalendar() {
 }
 
 // ============================================================
-// DAILY SUMMARY
+// DAILY ANALYSIS
 // ============================================================
-function renderDailySummary() {
+function analyzeDaily() {
     const date = document.getElementById('daily-date').value || new Date().toISOString().split('T')[0];
     const dayNews = state.news.filter(n => n.dateOnly === date);
     
@@ -133,11 +133,10 @@ function renderDailySummary() {
         return;
     }
     
-    // Hitung sentimen per mata uang
     const currencySentiment = {};
     dayNews.forEach(n => {
         if (!currencySentiment[n.currency]) {
-            currencySentiment[n.currency] = { bullish: 0, bearish: 0, neutral: 0, news: [] };
+            currencySentiment[n.currency] = { bullish: 0, bearish: 0, neutral: 0 };
         }
         const forecast = parseFloat(n.forecast);
         const previous = parseFloat(n.previous);
@@ -153,10 +152,8 @@ function renderDailySummary() {
         }
         
         currencySentiment[n.currency][bias]++;
-        currencySentiment[n.currency].news.push({ ...n, bias });
     });
     
-    // Stats
     const highImpact = dayNews.filter(n => n.impact === 'high').length;
     const mediumImpact = dayNews.filter(n => n.impact === 'medium').length;
     const lowImpact = dayNews.filter(n => n.impact === 'low').length;
@@ -169,10 +166,8 @@ function renderDailySummary() {
         '<div class="day-stat"><div class="label">Low</div><div class="value" style="color:#74b9ff">' + lowImpact + '</div></div>' +
         '</div></div>';
     
-    // Sentimen per mata uang
     html += '<div class="analysis-section"><h3>Sentimen per Mata Uang</h3>';
     for (const [currency, data] of Object.entries(currencySentiment)) {
-        const total = data.bullish + data.bearish + data.neutral;
         let overall = 'neutral';
         if (data.bullish > data.bearish) overall = 'bullish';
         else if (data.bearish > data.bullish) overall = 'bearish';
@@ -184,7 +179,6 @@ function renderDailySummary() {
     }
     html += '</div>';
     
-    // Entry recommendation
     html += '<div class="analysis-section"><h3>Rekomendasi Entry</h3>';
     for (const [currency, data] of Object.entries(currencySentiment)) {
         let overall = 'neutral';
@@ -211,7 +205,6 @@ function renderDailySummary() {
     }
     html += '</div>';
     
-    // List news
     html += '<div class="analysis-section"><h3>Daftar News</h3>';
     html += dayNews.map(n => 
         '<div class="news-item ' + n.impact + '">' +
@@ -233,12 +226,9 @@ function renderDailySummary() {
 // ============================================================
 function populateNewsSelect() {
     const sel = document.getElementById('select-news');
-    const date = document.getElementById('filter-date').value;
-    let filtered = state.news;
-    if (date) filtered = filtered.filter(n => n.dateOnly === date);
-    
+    if (!sel) return;
     sel.innerHTML = '<option value="">-- Pilih News --</option>' +
-        filtered.map((n, i) => 
+        state.news.map((n, i) => 
             '<option value="' + i + '">' + n.dateOnly + ' — ' + n.currency + ' — ' + n.title + '</option>'
         ).join('');
 }
@@ -247,11 +237,7 @@ function populateNewsSelect() {
 // ANALISA NEWS SPESIFIK
 // ============================================================
 function analyzeNews(index) {
-    const date = document.getElementById('filter-date').value;
-    let filtered = state.news;
-    if (date) filtered = filtered.filter(n => n.dateOnly === date);
-    
-    const news = filtered[index];
+    const news = state.news[index];
     if (!news) return;
     
     const forecast = parseFloat(news.forecast);
@@ -309,4 +295,116 @@ function analyzeNews(index) {
             '<div class="entry-box"><div class="pair">' + e.pair + '</div>' +
             '<div class="entry-row buy">BUY @ ' + e.buy + '</div>' +
             '<div class="entry-row">SL: ' + e.sl + '</div>' +
-            '<
+            '<div class="entry-row">TP1: ' + e.tp1 + '</div>' +
+            '<div class="entry-row">TP2: ' + e.tp2 + '</div>' +
+            '<div class="entry-row">R:R = ' + e.rr + '</div></div>'
+        ).join('') +
+        '</div>';
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function getAffectedPairs(currency) {
+    const map = {
+        USD: ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'USD/CHF', 'XAU/USD'],
+        EUR: ['EUR/USD', 'EUR/GBP', 'EUR/JPY'],
+        GBP: ['GBP/USD', 'EUR/GBP', 'GBP/JPY'],
+        JPY: ['USD/JPY', 'EUR/JPY', 'GBP/JPY'],
+        AUD: ['AUD/USD', 'AUD/JPY'],
+        CAD: ['USD/CAD', 'CAD/JPY'],
+        CHF: ['USD/CHF', 'EUR/CHF'],
+        NZD: ['NZD/USD'],
+        XAU: ['XAU/USD']
+    };
+    return map[currency] || [currency + '/USD'];
+}
+
+function generateEntry(pair, price, sentiment) {
+    const atr = price * 0.005;
+    let buy, sl, tp1, tp2;
+    if (sentiment === 'bullish') {
+        buy = price; sl = price - atr * 1.5; tp1 = price + atr * 1.5; tp2 = price + atr * 3;
+    } else if (sentiment === 'bearish') {
+        buy = price; sl = price + atr * 1.5; tp1 = price - atr * 1.5; tp2 = price - atr * 3;
+    } else {
+        buy = price; sl = price - atr; tp1 = price + atr; tp2 = price + atr * 2;
+    }
+    const rr = ((Math.abs(tp1 - price)) / (Math.abs(sl - price))).toFixed(2);
+    const dec = pair.includes('JPY') ? 3 : 5;
+    return {
+        pair: pair,
+        buy: buy.toFixed(dec),
+        sl: sl.toFixed(dec),
+        tp1: tp1.toFixed(dec),
+        tp2: tp2.toFixed(dec),
+        rr: '1:' + rr
+    };
+}
+
+function renderWatchlist() {
+    const el = document.getElementById('watchlist-list');
+    if (!el) return;
+    if (state.watchlist.length === 0) {
+        el.innerHTML = '<div class="empty">Belum ada pair.</div>';
+        return;
+    }
+    el.innerHTML = state.watchlist.map(pair => {
+        const key = pair.replace('/', '');
+        const price = state.prices[key] || '—';
+        return '<div class="watch-item"><span class="pair">' + pair + '</span><span class="price">' + price + '</span><button class="remove" onclick="removeWatch(\'' + pair + '\')">×</button></div>';
+    }).join('');
+}
+
+function addWatch() {
+    const pair = prompt('Masukkan pair (contoh: EUR/USD):');
+    if (pair && !state.watchlist.includes(pair)) {
+        state.watchlist.push(pair);
+        localStorage.setItem('watchlist', JSON.stringify(state.watchlist));
+        renderWatchlist();
+    }
+}
+
+function removeWatch(pair) {
+    state.watchlist = state.watchlist.filter(p => p !== pair);
+    localStorage.setItem('watchlist', JSON.stringify(state.watchlist));
+    renderWatchlist();
+}
+
+function setStatus(msg) {
+    document.getElementById('status').textContent = msg;
+}
+
+// ============================================================
+// TABS
+// ============================================================
+document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    });
+});
+
+// ============================================================
+// EVENT LISTENERS
+// ============================================================
+document.getElementById('filter-impact').addEventListener('change', applyFilter);
+document.getElementById('filter-currency').addEventListener('change', applyFilter);
+document.getElementById('filter-date').addEventListener('change', applyFilter);
+document.getElementById('btn-analyze-daily').addEventListener('click', analyzeDaily);
+document.getElementById('btn-analyze-news').addEventListener('click', () => {
+    const idx = document.getElementById('select-news').value;
+    if (idx !== '') analyzeNews(parseInt(idx));
+});
+document.getElementById('btn-add-watch').addEventListener('click', addWatch);
+
+// ============================================================
+// INIT
+// ============================================================
+document.getElementById('filter-date').value = new Date().toISOString().split('T')[0];
+document.getElementById('daily-date').value = new Date().toISOString().split('T')[0];
+fetchNews();
+fetchPrices();
+setInterval(fetchPrices, 60000);
