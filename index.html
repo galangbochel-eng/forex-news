@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#6c5ce7">
+    <title>Forex News Trader</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>📊 Forex News Trader</h1>
+        <div class="status" id="status">Loading...</div>
+    </header>
+
+    <nav>
+        <button class="tab active" data-tab="calendar">📅 Kalender</button>
+        <button class="tab" data-tab="analysis">📈 Analisa</button>
+        <button class="tab" data-tab="watchlist">⭐ Watchlist</button>
+    </nav>
+
+    <main>
+        <!-- TAB: KALENDER -->
+        <section id="tab-calendar" class="tab-content active">
+            <div class="controls">
+                <select id="filter-impact">
+                    <option value="all">Semua Impact</option>
+                    <option value="high">High Impact</option>
+                    <option value="medium">Medium Impact</option>
+                    <option value="low">Low Impact</option>
+                </select>
+                <select id="filter-currency">
+                    <option value="all">Semua Mata Uang</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                    <option value="JPY">JPY</option>
+                    <option value="AUD">AUD</option>
+                    <option value="CAD">CAD</option>
+                    <option value="CHF">CHF</option>
+                    <option value="NZD">NZD</option>
+                    <option value="XAU">XAU (Gold)</option>
+                </select>
+            </div>
+            <div id="calendar-list"></div>
+        </section>
+
+        <!-- TAB: ANALISA -->
+        <section id="tab-analysis" class="tab-content">
+            <div class="analysis-panel">
+                <h2>Pilih News</h2>
+                <select id="select-news"></select>
+                <button id="btn-analyze">Analisa</button>
+            </div>
+            <div id="analysis-result"></div>
+        </section>
+
+        <!-- TAB: WATCHLIST -->
+        <section id="tab-watchlist" class="tab-content">
+            <div class="watchlist-panel">
+                <h2>Watchlist Pair</h2>
+                <div id="watchlist-list"></div>
+                <button id="btn-add-watch">+ Tambah Pair</button>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Data dari Forex Factory & Exchangerate.host — Bukan financial advice</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

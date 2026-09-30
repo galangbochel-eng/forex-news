@@ -1,0 +1,329 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0a0a0f;
+    color: #e0e0e0;
+    min-height: 100vh;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: #16161f;
+    border-bottom: 1px solid #2a2a3a;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+h1 { font-size: 18px; color: #6c5ce7; }
+
+.status {
+    font-size: 11px;
+    color: #888;
+    font-family: monospace;
+}
+
+nav {
+    display: flex;
+    background: #16161f;
+    border-bottom: 1px solid #2a2a3a;
+    overflow-x: auto;
+}
+
+.tab {
+    flex: 1;
+    padding: 12px;
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    min-width: 100px;
+}
+
+.tab.active {
+    color: #6c5ce7;
+    border-bottom-color: #6c5ce7;
+}
+
+.tab:hover { color: #6c5ce7; }
+
+main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+select, input {
+    flex: 1;
+    padding: 10px 12px;
+    background: #16161f;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 13px;
+    min-width: 140px;
+}
+
+select:focus, input:focus {
+    outline: none;
+    border-color: #6c5ce7;
+}
+
+button {
+    padding: 12px 20px;
+    background: #6c5ce7;
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+button:hover { background: #5b4bd6; }
+button:active { transform: scale(0.98); }
+
+.news-item {
+    background: #16161f;
+    border: 1px solid #2a2a3a;
+    border-left: 4px solid #666;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+}
+
+.news-item.high { border-left-color: #e17055; }
+.news-item.medium { border-left-color: #fdcb6e; }
+.news-item.low { border-left-color: #74b9ff; }
+
+.news-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.news-currency {
+    font-size: 14px;
+    font-weight: bold;
+    color: #6c5ce7;
+}
+
+.news-time {
+    font-size: 11px;
+    color: #888;
+    font-family: monospace;
+}
+
+.news-title {
+    font-size: 14px;
+    color: #fff;
+    margin-bottom: 8px;
+}
+
+.news-data {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    font-size: 12px;
+}
+
+.news-data .label {
+    color: #666;
+    font-size: 10px;
+    text-transform: uppercase;
+}
+
+.news-data .value {
+    color: #e0e0e0;
+    font-family: monospace;
+}
+
+.news-data .value.forecast { color: #74b9ff; }
+.news-data .value.previous { color: #888; }
+.news-data .value.actual { color: #00b894; font-weight: bold; }
+
+.analysis-panel {
+    background: #16161f;
+    border: 1px solid #2a2a3a;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.analysis-panel h2 {
+    font-size: 14px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+}
+
+.analysis-panel select {
+    width: 100%;
+    margin-bottom: 12px;
+}
+
+.analysis-panel button {
+    width: 100%;
+}
+
+#analysis-result {
+    background: #16161f;
+    border: 1px solid #2a2a3a;
+    border-radius: 10px;
+    padding: 20px;
+}
+
+.analysis-section {
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #2a2a3a;
+}
+
+.analysis-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.analysis-section h3 {
+    font-size: 13px;
+    color: #6c5ce7;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+}
+
+.analysis-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #1a1a2a;
+    font-size: 13px;
+}
+
+.analysis-row:last-child { border-bottom: none; }
+
+.analysis-row .label { color: #888; }
+.analysis-row .value { color: #fff; font-family: monospace; }
+
+.sentiment-bullish { color: #00b894 !important; }
+.sentiment-bearish { color: #e17055 !important; }
+.sentiment-neutral { color: #fdcb6e !important; }
+
+.entry-box {
+    background: #0a0a0f;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 12px;
+}
+
+.entry-box .pair {
+    font-size: 18px;
+    font-weight: bold;
+    color: #6c5ce7;
+    margin-bottom: 12px;
+}
+
+.entry-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-family: monospace;
+    font-size: 13px;
+}
+
+.entry-row.buy { color: #00b894; }
+.entry-row.sell { color: #e17055; }
+
+.watchlist-panel {
+    background: #16161f;
+    border: 1px solid #2a2a3a;
+    border-radius: 10px;
+    padding: 20px;
+}
+
+.watchlist-panel h2 {
+    font-size: 14px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+}
+
+.watch-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0a0a0f;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+}
+
+.watch-item .pair {
+    font-family: monospace;
+    font-size: 14px;
+    color: #6c5ce7;
+    font-weight: bold;
+}
+
+.watch-item .price {
+    font-family: monospace;
+    font-size: 14px;
+    color: #00b894;
+}
+
+.watch-item .remove {
+    background: #e17055;
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    padding: 6px 10px;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+footer {
+    text-align: center;
+    padding: 20px;
+    color: #444;
+    font-size: 11px;
+}
+
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+}
+
+.empty {
+    text-align: center;
+    padding: 40px;
+    color: #444;
+    font-size: 13px;
+}
