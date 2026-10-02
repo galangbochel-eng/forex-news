@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XAUUSD News Analyzer — FinBERT</title>
+    <title>XAUUSD News Analyzer</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -67,6 +67,7 @@
         .model-status.loading { color: #f0a030; }
         .model-status.ready { color: #30c060; }
         .model-status.error { color: #e04040; }
+        .model-status.fallback { color: #f0a030; }
         .card {
             background: #141414;
             border: 1px solid #222;
@@ -112,23 +113,6 @@
         .sentiment-badge.positive { background: #1a3a1a; color: #30c060; }
         .sentiment-badge.negative { background: #3a1a1a; color: #e04040; }
         .sentiment-badge.neutral { background: #2a2a2a; color: #888; }
-        .score-bar {
-            display: inline-block;
-            width: 60px;
-            height: 6px;
-            background: #222;
-            border-radius: 3px;
-            overflow: hidden;
-            margin-left: 8px;
-            vertical-align: middle;
-        }
-        .score-fill {
-            height: 100%;
-            transition: width 0.3s;
-        }
-        .score-fill.positive { background: #30c060; }
-        .score-fill.negative { background: #e04040; }
-        .score-fill.neutral { background: #666; }
         .btn {
             width: 100%;
             padding: 12px;
@@ -167,20 +151,18 @@
 <body>
     <div class="container">
         <h1>XAUUSD News Analyzer</h1>
-        <p class="subtitle">Analisa berita dengan FinBERT → Sinyal Buy/Sell</p>
+        <p class="subtitle">Analisa berita → Sinyal Buy/Sell</p>
 
         <div id="modelStatus" class="model-status loading">
-            <span class="loading-spinner"></span>Memuat model FinBERT...
+            <span class="loading-spinner"></span>Memuat model...
         </div>
 
-        <!-- SIGNAL BOX -->
         <div id="signalBox" class="signal-box neutral">
             <div class="signal-label">Sinyal dari Berita</div>
             <div id="signalValue" class="signal-value neutral">—</div>
             <div id="signalConfidence" class="signal-confidence">Menunggu analisis...</div>
         </div>
 
-        <!-- NEWS -->
         <div class="card">
             <div class="card-title">Berita & Sentimen</div>
             <div id="newsContainer" class="news-list">
@@ -191,46 +173,84 @@
         <button id="refreshBtn" class="btn" onclick="runAnalysis()" disabled>Refresh Analisis</button>
 
         <p class="disclaimer">
-            Analisis sentimen otomatis dengan FinBERT. Bukan saran keuangan.
+            Analisis sentimen otomatis. Bukan saran keuangan.
             Selalu lakukan riset sendiri sebelum trading.
         </p>
     </div>
 
     <script type="module">
-        // ===== IMPORT TRANSFORMERS.JS =====
-        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
-
-        // Konfigurasi: pakai model dari Hugging Face
-        env.allowLocalModels = false;
-        env.useBrowserCache = true;
-
         // ===== STATE =====
         let sentimentPipeline = null;
         let modelReady = false;
-        let allNews = [];
+        let useFallback = false;
 
-        // ===== LOAD FINBERT MODEL =====
+        // ===== KEYWORD FALLBACK =====
+        const BULLISH_KEYWORDS = [
+            'inflation', 'geopolitic', 'war', 'crisis', 'rate cut', 'dovish',
+            'weak dollar', 'recession', 'safe haven', 'uncertainty', 'tension',
+            'conflict', 'stimulus', 'qe', 'printing', 'debt ceiling',
+            'gold rally', 'gold surge', 'gold rise', 'bullion'
+        ];
+
+        const BEARISH_KEYWORDS = [
+            'rate hike', 'hawkish', 'strong dollar', 'yield', 'tightening',
+            'recovery', 'optimism', 'peace', 'ceasefire', 'agreement',
+            'gold fall', 'gold drop', 'gold decline', 'sell-off',
+            'profit taking', 'correction'
+        ];
+
+        function keywordSentiment(text) {
+            const lower = text.toLowerCase();
+            let bull = 0, bear = 0;
+
+            BULLISH_KEYWORDS.forEach(kw => { if (lower.includes(kw)) bull++; });
+            BEARISH_KEYWORDS.forEach(kw => { if (lower.includes(kw)) bear++; });
+
+            if (bull > bear) return { label: 'positive', score: Math.min(bull / 3, 1), numericScore: Math.min(bull / 3, 1) };
+            if (bear > bull) return { label: 'negative', score: Math.min(bear / 3, 1), numericScore: -Math.min(bear / 3, 1) };
+            return { label: 'neutral', score: 0.5, numericScore: 0 };
+        }
+
+        // ===== LOAD MODEL =====
         async function loadModel() {
             const statusEl = document.getElementById('modelStatus');
 
             try {
-                statusEl.innerHTML = '<span class="loading-spinner"></span>Memuat model FinBERT (pertama kali ~100MB)...';
+                statusEl.innerHTML = '<span class="loading-spinner"></span>Memuat FinBERT ONNX...';
 
+                // Dynamic import
+                const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+
+                env.allowLocalModels = false;
+                env.useBrowserCache = true;
+
+                // Pakai Xenova/finbert - versi ONNX yang work
                 sentimentPipeline = await pipeline(
                     'sentiment-analysis',
-                    'ProsusAI/finbert',
+                    'Xenova/finbert',
                     { quantized: true }
                 );
 
                 modelReady = true;
-                statusEl.textContent = '✓ Model FinBERT siap';
+                statusEl.textContent = '✓ FinBERT siap';
                 statusEl.className = 'model-status ready';
                 document.getElementById('refreshBtn').disabled = false;
 
+                // Auto-run
+                runAnalysis();
+
             } catch (error) {
                 console.error('Model load error:', error);
-                statusEl.textContent = `✗ Gagal load model: ${error.message}`;
-                statusEl.className = 'model-status error';
+                
+                // Fallback ke keyword matching
+                useFallback = true;
+                modelReady = true;
+                statusEl.textContent = '⚠ Model gagal load, pakai keyword analysis (fallback)';
+                statusEl.className = 'model-status fallback';
+                document.getElementById('refreshBtn').disabled = false;
+
+                // Auto-run dengan fallback
+                runAnalysis();
             }
         }
 
@@ -245,7 +265,7 @@
                 { name: 'BBC Business', url: 'http://feeds.bbci.co.uk/news/business/rss.xml' }
             ];
 
-            allNews = [];
+            const allNews = [];
 
             for (const feed of feeds) {
                 try {
@@ -263,7 +283,8 @@
                                 pubDate: item.pubDate,
                                 source: feed.name,
                                 sentiment: null,
-                                score: 0
+                                score: 0,
+                                numericScore: 0
                             });
                         });
                     }
@@ -273,11 +294,11 @@
             }
 
             if (allNews.length === 0) {
-                container.innerHTML = '<div style="text-align:center;color:#e04040;padding:20px;">Gagal load berita. Cek koneksi internet.</div>';
+                container.innerHTML = '<div style="text-align:center;color:#e04040;padding:20px;">Gagal load berita. Cek koneksi.</div>';
                 return;
             }
 
-            // Filter berita yang relevan dengan gold/forex
+            // Filter relevan
             const relevantKeywords = ['gold', 'xau', 'fed', 'dollar', 'inflation', 'rate',
                                        'yield', 'economy', 'market', 'trade', 'geopolitic',
                                        'war', 'crisis', 'recession', 'metal', 'commodity'];
@@ -287,10 +308,9 @@
                 return relevantKeywords.some(kw => text.includes(kw));
             });
 
-            // Kalau nggak ada yang relevan, pakai semua
             const newsToAnalyze = relevantNews.length > 0 ? relevantNews : allNews;
 
-            // Analisis sentimen dengan FinBERT
+            // Analisis sentimen
             await analyzeSentiment(newsToAnalyze);
 
             // Render
@@ -300,36 +320,39 @@
             generateSignal(newsToAnalyze);
         }
 
-        // ===== ANALYZE SENTIMENT WITH FINBERT =====
+        // ===== ANALYZE SENTIMENT =====
         async function analyzeSentiment(newsItems) {
-            if (!modelReady || !sentimentPipeline) return;
-
             for (const item of newsItems) {
-                try {
-                    // Gabung title + description (max 512 token)
-                    const text = (item.title + '. ' + item.description).substring(0, 500);
+                const text = (item.title + '. ' + item.description).substring(0, 500);
 
-                    const result = await sentimentPipeline(text);
-                    const sentiment = result[0];
+                if (useFallback || !sentimentPipeline) {
+                    // Pakai keyword matching
+                    const result = keywordSentiment(text);
+                    item.sentiment = result.label;
+                    item.score = result.score;
+                    item.numericScore = result.numericScore;
+                } else {
+                    try {
+                        const result = await sentimentPipeline(text);
+                        const sentiment = result[0];
 
-                    // FinBERT output: { label: 'positive'|'negative'|'neutral', score: 0-1 }
-                    item.sentiment = sentiment.label;
-                    item.score = sentiment.score;
+                        item.sentiment = sentiment.label;
+                        item.score = sentiment.score;
 
-                    // Konversi ke skor -1 to 1
-                    if (sentiment.label === 'positive') {
-                        item.numericScore = sentiment.score;
-                    } else if (sentiment.label === 'negative') {
-                        item.numericScore = -sentiment.score;
-                    } else {
-                        item.numericScore = 0;
+                        if (sentiment.label === 'positive') {
+                            item.numericScore = sentiment.score;
+                        } else if (sentiment.label === 'negative') {
+                            item.numericScore = -sentiment.score;
+                        } else {
+                            item.numericScore = 0;
+                        }
+                    } catch (e) {
+                        // Fallback per item
+                        const result = keywordSentiment(text);
+                        item.sentiment = result.label;
+                        item.score = result.score;
+                        item.numericScore = result.numericScore;
                     }
-
-                } catch (e) {
-                    console.warn('Sentiment error:', e);
-                    item.sentiment = 'neutral';
-                    item.score = 0;
-                    item.numericScore = 0;
                 }
             }
         }
@@ -348,9 +371,6 @@
                         <div class="news-title">${item.title}</div>
                         <div class="news-meta">
                             <span class="sentiment-badge ${sentiment}">${sentiment}</span>
-                            <span class="score-bar">
-                                <span class="score-fill ${sentiment}" style="width:${scorePercent}%"></span>
-                            </span>
                             <span>${(score * 100).toFixed(0)}%</span>
                             <span>· ${item.source}</span>
                         </div>
@@ -365,7 +385,6 @@
             const signalValue = document.getElementById('signalValue');
             const signalConfidence = document.getElementById('signalConfidence');
 
-            // Hitung rata-rata sentimen
             const validItems = newsItems.filter(item => item.numericScore !== undefined);
             if (validItems.length === 0) {
                 signalValue.textContent = '—';
@@ -375,7 +394,6 @@
 
             const avgScore = validItems.reduce((sum, item) => sum + item.numericScore, 0) / validItems.length;
 
-            // Hitung confidence berdasarkan konsistensi
             const positiveCount = validItems.filter(i => i.numericScore > 0.1).length;
             const negativeCount = validItems.filter(i => i.numericScore < -0.1).length;
             const total = validItems.length;
@@ -395,11 +413,10 @@
                 confidence = Math.round((1 - Math.abs(avgScore)) * 100);
             }
 
-            // Update UI
             signalBox.className = `signal-box ${signal.toLowerCase()}`;
             signalValue.textContent = signal;
             signalValue.className = `signal-value ${signal.toLowerCase()}`;
-            signalConfidence.textContent = `Confidence: ${confidence}% · ${validItems.length} berita dianalisis`;
+            signalConfidence.textContent = `Confidence: ${confidence}% · ${validItems.length} berita${useFallback ? ' (keyword mode)' : ''}`;
         }
 
         // ===== RUN ANALYSIS =====
@@ -409,13 +426,8 @@
         }
 
         // ===== INIT =====
-        document.addEventListener('DOMContentLoaded', () => {
-            loadModel().then(() => {
-                if (modelReady) {
-                    runAnalysis();
-                }
-            });
-        });
+        window.runAnalysis = runAnalysis;
+        document.addEventListener('DOMContentLoaded', loadModel);
     </script>
 </body>
 </html>
