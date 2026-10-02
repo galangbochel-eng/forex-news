@@ -1,87 +1,421 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#6c5ce7">
-<title>Forex News Trader</title>
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XAUUSD News Analyzer — FinBERT</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 16px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 {
+            font-size: 24px;
+            font-weight: 300;
+            margin-bottom: 4px;
+            color: #fff;
+        }
+        .subtitle {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 24px;
+        }
+        .signal-box {
+            background: #141414;
+            border: 2px solid #222;
+            border-radius: 16px;
+            padding: 32px;
+            text-align: center;
+            margin-bottom: 16px;
+            transition: all 0.3s;
+        }
+        .signal-box.buy { border-color: #30c060; background: #0f1a12; }
+        .signal-box.sell { border-color: #e04040; background: #1a0f0f; }
+        .signal-box.neutral { border-color: #666; background: #141414; }
+        .signal-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #666;
+            margin-bottom: 12px;
+        }
+        .signal-value {
+            font-size: 72px;
+            font-weight: 700;
+            letter-spacing: -2px;
+            margin-bottom: 8px;
+        }
+        .signal-value.buy { color: #30c060; }
+        .signal-value.sell { color: #e04040; }
+        .signal-value.neutral { color: #888; }
+        .signal-confidence {
+            font-size: 16px;
+            color: #888;
+        }
+        .model-status {
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+            padding: 8px;
+            margin-bottom: 16px;
+        }
+        .model-status.loading { color: #f0a030; }
+        .model-status.ready { color: #30c060; }
+        .model-status.error { color: #e04040; }
+        .card {
+            background: #141414;
+            border: 1px solid #222;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+        .card-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #555;
+            margin-bottom: 12px;
+        }
+        .news-list { max-height: 500px; overflow-y: auto; }
+        .news-item {
+            padding: 12px 0;
+            border-bottom: 1px solid #1a1a1a;
+        }
+        .news-item:last-child { border-bottom: none; }
+        .news-title {
+            font-size: 13px;
+            color: #ccc;
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+        .news-meta {
+            font-size: 11px;
+            color: #555;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .sentiment-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .sentiment-badge.positive { background: #1a3a1a; color: #30c060; }
+        .sentiment-badge.negative { background: #3a1a1a; color: #e04040; }
+        .sentiment-badge.neutral { background: #2a2a2a; color: #888; }
+        .score-bar {
+            display: inline-block;
+            width: 60px;
+            height: 6px;
+            background: #222;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        .score-fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+        .score-fill.positive { background: #30c060; }
+        .score-fill.negative { background: #e04040; }
+        .score-fill.neutral { background: #666; }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: #fff;
+            color: #0a0a0a;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .btn:hover { background: #e0e0e0; }
+        .btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+        .disclaimer {
+            font-size: 11px;
+            color: #444;
+            text-align: center;
+            margin-top: 24px;
+            line-height: 1.5;
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #333;
+            border-top-color: #f0a030;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
 </head>
 <body>
-<header>
-<h1>📊 Forex News Trader</h1>
-<div class="status" id="status">Loading...</div>
-</header>
+    <div class="container">
+        <h1>XAUUSD News Analyzer</h1>
+        <p class="subtitle">Analisa berita dengan FinBERT → Sinyal Buy/Sell</p>
 
-<nav>
-<button class="tab active" data-tab="calendar">📅 Kalender</button>
-<button class="tab" data-tab="daily">📈 Analisa Harian</button>
-<button class="tab" data-tab="news">🔍 Analisa News</button>
-<button class="tab" data-tab="watchlist">⭐ Watchlist</button>
-</nav>
+        <div id="modelStatus" class="model-status loading">
+            <span class="loading-spinner"></span>Memuat model FinBERT...
+        </div>
 
-<main>
-<!-- TAB: KALENDER -->
-<section id="tab-calendar" class="tab-content active">
-<div class="controls">
-<label>Tanggal:</label>
-<input type="date" id="filter-date">
-<select id="filter-impact">
-<option value="all">Semua Impact</option>
-<option value="high">High Impact</option>
-<option value="medium">Medium Impact</option>
-<option value="low">Low Impact</option>
-</select>
-<select id="filter-currency">
-<option value="all">Semua Mata Uang</option>
-<option value="USD">USD</option>
-<option value="EUR">EUR</option>
-<option value="GBP">GBP</option>
-<option value="JPY">JPY</option>
-<option value="AUD">AUD</option>
-<option value="CAD">CAD</option>
-<option value="CHF">CHF</option>
-<option value="NZD">NZD</option>
-<option value="XAU">XAU</option>
-</select>
-</div>
-<div id="calendar-list"></div>
-</section>
+        <!-- SIGNAL BOX -->
+        <div id="signalBox" class="signal-box neutral">
+            <div class="signal-label">Sinyal dari Berita</div>
+            <div id="signalValue" class="signal-value neutral">—</div>
+            <div id="signalConfidence" class="signal-confidence">Menunggu analisis...</div>
+        </div>
 
-<!-- TAB: ANALISA HARIAN -->
-<section id="tab-daily" class="tab-content">
-<div class="controls">
-<label>Tanggal:</label>
-<input type="date" id="daily-date">
-<button id="btn-analyze-daily">Analisa Hari Ini</button>
-</div>
-<div id="daily-result"></div>
-</section>
+        <!-- NEWS -->
+        <div class="card">
+            <div class="card-title">Berita & Sentimen</div>
+            <div id="newsContainer" class="news-list">
+                <div style="text-align:center;color:#666;padding:20px;">Memuat berita...</div>
+            </div>
+        </div>
 
-<!-- TAB: ANALISA NEWS -->
-<section id="tab-news" class="tab-content">
-<div class="analysis-panel">
-<h2>Pilih News Spesifik</h2>
-<select id="select-news"></select>
-<button id="btn-analyze-news">Analisa News</button>
-</div>
-<div id="news-result"></div>
-</section>
+        <button id="refreshBtn" class="btn" onclick="runAnalysis()" disabled>Refresh Analisis</button>
 
-<!-- TAB: WATCHLIST -->
-<section id="tab-watchlist" class="tab-content">
-<div class="watchlist-panel">
-<h2>Watchlist Pair</h2>
-<div id="watchlist-list"></div>
-<button id="btn-add-watch">+ Tambah Pair</button>
-</div>
-</section>
-</main>
+        <p class="disclaimer">
+            Analisis sentimen otomatis dengan FinBERT. Bukan saran keuangan.
+            Selalu lakukan riset sendiri sebelum trading.
+        </p>
+    </div>
 
-<footer>
-<p>Data dari Forex Factory & Exchangerate.host — Bukan financial advice</p>
-</footer>
+    <script type="module">
+        // ===== IMPORT TRANSFORMERS.JS =====
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
 
-<script src="app.js"></script>
+        // Konfigurasi: pakai model dari Hugging Face
+        env.allowLocalModels = false;
+        env.useBrowserCache = true;
+
+        // ===== STATE =====
+        let sentimentPipeline = null;
+        let modelReady = false;
+        let allNews = [];
+
+        // ===== LOAD FINBERT MODEL =====
+        async function loadModel() {
+            const statusEl = document.getElementById('modelStatus');
+
+            try {
+                statusEl.innerHTML = '<span class="loading-spinner"></span>Memuat model FinBERT (pertama kali ~100MB)...';
+
+                sentimentPipeline = await pipeline(
+                    'sentiment-analysis',
+                    'ProsusAI/finbert',
+                    { quantized: true }
+                );
+
+                modelReady = true;
+                statusEl.textContent = '✓ Model FinBERT siap';
+                statusEl.className = 'model-status ready';
+                document.getElementById('refreshBtn').disabled = false;
+
+            } catch (error) {
+                console.error('Model load error:', error);
+                statusEl.textContent = `✗ Gagal load model: ${error.message}`;
+                statusEl.className = 'model-status error';
+            }
+        }
+
+        // ===== FETCH NEWS =====
+        async function fetchNews() {
+            const container = document.getElementById('newsContainer');
+            container.innerHTML = '<div style="text-align:center;color:#666;padding:20px;">Memuat berita...</div>';
+
+            const feeds = [
+                { name: 'Reuters', url: 'https://feeds.reuters.com/reuters/businessNews' },
+                { name: 'FXStreet', url: 'https://www.fxstreet.com/rss/news' },
+                { name: 'BBC Business', url: 'http://feeds.bbci.co.uk/news/business/rss.xml' }
+            ];
+
+            allNews = [];
+
+            for (const feed of feeds) {
+                try {
+                    const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feed.url)}&count=10`;
+                    const response = await fetch(apiUrl);
+                    if (!response.ok) continue;
+
+                    const data = await response.json();
+                    if (data.status === 'ok' && data.items) {
+                        data.items.forEach(item => {
+                            allNews.push({
+                                title: item.title,
+                                description: item.description || '',
+                                link: item.link,
+                                pubDate: item.pubDate,
+                                source: feed.name,
+                                sentiment: null,
+                                score: 0
+                            });
+                        });
+                    }
+                } catch (e) {
+                    console.warn(`Failed ${feed.name}:`, e);
+                }
+            }
+
+            if (allNews.length === 0) {
+                container.innerHTML = '<div style="text-align:center;color:#e04040;padding:20px;">Gagal load berita. Cek koneksi internet.</div>';
+                return;
+            }
+
+            // Filter berita yang relevan dengan gold/forex
+            const relevantKeywords = ['gold', 'xau', 'fed', 'dollar', 'inflation', 'rate',
+                                       'yield', 'economy', 'market', 'trade', 'geopolitic',
+                                       'war', 'crisis', 'recession', 'metal', 'commodity'];
+
+            const relevantNews = allNews.filter(item => {
+                const text = (item.title + ' ' + item.description).toLowerCase();
+                return relevantKeywords.some(kw => text.includes(kw));
+            });
+
+            // Kalau nggak ada yang relevan, pakai semua
+            const newsToAnalyze = relevantNews.length > 0 ? relevantNews : allNews;
+
+            // Analisis sentimen dengan FinBERT
+            await analyzeSentiment(newsToAnalyze);
+
+            // Render
+            renderNews(newsToAnalyze);
+
+            // Generate signal
+            generateSignal(newsToAnalyze);
+        }
+
+        // ===== ANALYZE SENTIMENT WITH FINBERT =====
+        async function analyzeSentiment(newsItems) {
+            if (!modelReady || !sentimentPipeline) return;
+
+            for (const item of newsItems) {
+                try {
+                    // Gabung title + description (max 512 token)
+                    const text = (item.title + '. ' + item.description).substring(0, 500);
+
+                    const result = await sentimentPipeline(text);
+                    const sentiment = result[0];
+
+                    // FinBERT output: { label: 'positive'|'negative'|'neutral', score: 0-1 }
+                    item.sentiment = sentiment.label;
+                    item.score = sentiment.score;
+
+                    // Konversi ke skor -1 to 1
+                    if (sentiment.label === 'positive') {
+                        item.numericScore = sentiment.score;
+                    } else if (sentiment.label === 'negative') {
+                        item.numericScore = -sentiment.score;
+                    } else {
+                        item.numericScore = 0;
+                    }
+
+                } catch (e) {
+                    console.warn('Sentiment error:', e);
+                    item.sentiment = 'neutral';
+                    item.score = 0;
+                    item.numericScore = 0;
+                }
+            }
+        }
+
+        // ===== RENDER NEWS =====
+        function renderNews(newsItems) {
+            const container = document.getElementById('newsContainer');
+
+            container.innerHTML = newsItems.slice(0, 20).map(item => {
+                const sentiment = item.sentiment || 'neutral';
+                const score = item.numericScore || 0;
+                const scorePercent = Math.abs(score) * 100;
+
+                return `
+                    <div class="news-item">
+                        <div class="news-title">${item.title}</div>
+                        <div class="news-meta">
+                            <span class="sentiment-badge ${sentiment}">${sentiment}</span>
+                            <span class="score-bar">
+                                <span class="score-fill ${sentiment}" style="width:${scorePercent}%"></span>
+                            </span>
+                            <span>${(score * 100).toFixed(0)}%</span>
+                            <span>· ${item.source}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ===== GENERATE SIGNAL =====
+        function generateSignal(newsItems) {
+            const signalBox = document.getElementById('signalBox');
+            const signalValue = document.getElementById('signalValue');
+            const signalConfidence = document.getElementById('signalConfidence');
+
+            // Hitung rata-rata sentimen
+            const validItems = newsItems.filter(item => item.numericScore !== undefined);
+            if (validItems.length === 0) {
+                signalValue.textContent = '—';
+                signalConfidence.textContent = 'Tidak ada data';
+                return;
+            }
+
+            const avgScore = validItems.reduce((sum, item) => sum + item.numericScore, 0) / validItems.length;
+
+            // Hitung confidence berdasarkan konsistensi
+            const positiveCount = validItems.filter(i => i.numericScore > 0.1).length;
+            const negativeCount = validItems.filter(i => i.numericScore < -0.1).length;
+            const total = validItems.length;
+
+            const consistency = Math.abs(positiveCount - negativeCount) / total;
+
+            let signal, confidence;
+
+            if (avgScore > 0.15) {
+                signal = 'BUY';
+                confidence = Math.min(Math.round(avgScore * 100 + consistency * 30), 95);
+            } else if (avgScore < -0.15) {
+                signal = 'SELL';
+                confidence = Math.min(Math.round(Math.abs(avgScore) * 100 + consistency * 30), 95);
+            } else {
+                signal = 'NEUTRAL';
+                confidence = Math.round((1 - Math.abs(avgScore)) * 100);
+            }
+
+            // Update UI
+            signalBox.className = `signal-box ${signal.toLowerCase()}`;
+            signalValue.textContent = signal;
+            signalValue.className = `signal-value ${signal.toLowerCase()}`;
+            signalConfidence.textContent = `Confidence: ${confidence}% · ${validItems.length} berita dianalisis`;
+        }
+
+        // ===== RUN ANALYSIS =====
+        async function runAnalysis() {
+            if (!modelReady) return;
+            await fetchNews();
+        }
+
+        // ===== INIT =====
+        document.addEventListener('DOMContentLoaded', () => {
+            loadModel().then(() => {
+                if (modelReady) {
+                    runAnalysis();
+                }
+            });
+        });
+    </script>
 </body>
 </html>
