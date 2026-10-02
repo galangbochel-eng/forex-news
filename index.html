@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XAUUSD News Analyzer</title>
+    <title>XAUUSD Analyzer — Akurat</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -57,6 +57,13 @@
             font-size: 16px;
             color: #888;
         }
+        .signal-reason {
+            font-size: 12px;
+            color: #666;
+            margin-top: 12px;
+            line-height: 1.5;
+            text-align: left;
+        }
         .model-status {
             font-size: 12px;
             color: #666;
@@ -66,7 +73,6 @@
         }
         .model-status.loading { color: #f0a030; }
         .model-status.ready { color: #30c060; }
-        .model-status.error { color: #e04040; }
         .model-status.fallback { color: #f0a030; }
         .card {
             background: #141414;
@@ -146,25 +152,54 @@
             vertical-align: middle;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .price-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            font-size: 13px;
+        }
+        .price-label { color: #888; }
+        .price-value { color: #e0e0e0; font-weight: 500; }
+        .price-value.up { color: #30c060; }
+        .price-value.down { color: #e04040; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>XAUUSD News Analyzer</h1>
-        <p class="subtitle">Analisa berita → Sinyal Buy/Sell</p>
+        <h1>XAUUSD Analyzer</h1>
+        <p class="subtitle">Analisa berita + harga → Sinyal Buy/Sell</p>
 
         <div id="modelStatus" class="model-status loading">
-            <span class="loading-spinner"></span>Memuat model...
+            <span class="loading-spinner"></span>Memuat...
         </div>
 
         <div id="signalBox" class="signal-box neutral">
-            <div class="signal-label">Sinyal dari Berita</div>
+            <div class="signal-label">Sinyal</div>
             <div id="signalValue" class="signal-value neutral">—</div>
             <div id="signalConfidence" class="signal-confidence">Menunggu analisis...</div>
+            <div id="signalReason" class="signal-reason"></div>
         </div>
 
         <div class="card">
-            <div class="card-title">Berita & Sentimen</div>
+            <div class="card-title">Harga XAUUSD</div>
+            <div id="priceContainer">
+                <div class="price-row">
+                    <span class="price-label">Harga</span>
+                    <span class="price-value" id="livePrice">—</span>
+                </div>
+                <div class="price-row">
+                    <span class="price-label">Perubahan 24h</span>
+                    <span class="price-value" id="priceChange">—</span>
+                </div>
+                <div class="price-row">
+                    <span class="price-label">Bias</span>
+                    <span class="price-value" id="priceBias">—</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Berita Relevan XAUUSD</div>
             <div id="newsContainer" class="news-list">
                 <div style="text-align:center;color:#666;padding:20px;">Memuat berita...</div>
             </div>
@@ -173,92 +208,131 @@
         <button id="refreshBtn" class="btn" onclick="runAnalysis()" disabled>Refresh Analisis</button>
 
         <p class="disclaimer">
-            Analisis sentimen otomatis. Bukan saran keuangan.
-            Selalu lakukan riset sendiri sebelum trading.
+            Analisis otomatis. Bukan saran keuangan. Selalu riset sendiri.
         </p>
     </div>
 
-    <script type="module">
+    <script>
         // ===== STATE =====
         let sentimentPipeline = null;
         let modelReady = false;
-        let useFallback = false;
+        let useFallback = true;
+        let currentPrice = null;
+        let priceChangePct = 0;
 
-        // ===== KEYWORD FALLBACK =====
-        const BULLISH_KEYWORDS = [
-            'inflation', 'geopolitic', 'war', 'crisis', 'rate cut', 'dovish',
-            'weak dollar', 'recession', 'safe haven', 'uncertainty', 'tension',
-            'conflict', 'stimulus', 'qe', 'printing', 'debt ceiling',
-            'gold rally', 'gold surge', 'gold rise', 'bullion'
+        // ===== XAUUSD-SPECIFIC KEYWORDS =====
+        // Bullish untuk gold
+        const BULLISH_PATTERNS = [
+            { pattern: /fed.*(dovish|cut|pause|ease|pivot)/i, weight: 3, label: 'Fed dovish' },
+            { pattern: /rate.*(cut|pause|lower)/i, weight: 3, label: 'Rate cut' },
+            { pattern: /(weak|weaker|fall|drop|decline).*(dollar|usd|dxy)/i, weight: 2.5, label: 'Weak USD' },
+            { pattern: /(inflation|inflationary)/i, weight: 1.5, label: 'Inflation' },
+            { pattern: /(geopolitic|war|conflict|tension|strike|attack|crisis)/i, weight: 2.5, label: 'Geopolitik' },
+            { pattern: /(recession|slowdown|contraction)/i, weight: 2, label: 'Resesi' },
+            { pattern: /(safe.?haven|risk.?off|uncertainty|fear)/i, weight: 2, label: 'Safe haven' },
+            { pattern: /(stimulus|qe|money printing|debt ceiling)/i, weight: 1.5, label: 'Stimulus' },
+            { pattern: /(gold|bullion|xau).*(rally|surge|rise|gain|climb|jump)/i, weight: 3, label: 'Gold rally' },
+            { pattern: /(buy|bullish|upside|support).*(gold|xau)/i, weight: 2, label: 'Buy gold' },
+            { pattern: /(central bank|reserve).*(buy|purchase|accumulate)/i, weight: 1.5, label: 'CB buying' },
         ];
 
-        const BEARISH_KEYWORDS = [
-            'rate hike', 'hawkish', 'strong dollar', 'yield', 'tightening',
-            'recovery', 'optimism', 'peace', 'ceasefire', 'agreement',
-            'gold fall', 'gold drop', 'gold decline', 'sell-off',
-            'profit taking', 'correction'
+        // Bearish untuk gold
+        const BEARISH_PATTERNS = [
+            { pattern: /fed.*(hawkish|hike|raise|tighten)/i, weight: 3, label: 'Fed hawkish' },
+            { pattern: /rate.*(hike|raise|higher|increase)/i, weight: 3, label: 'Rate hike' },
+            { pattern: /(strong|stronger|rise|gain|rally).*(dollar|usd|dxy)/i, weight: 2.5, label: 'Strong USD' },
+            { pattern: /(yield|treasury|bond).*(rise|higher|gain|climb)/i, weight: 2, label: 'Yield naik' },
+            { pattern: /(recovery|optimism|rebound|improve)/i, weight: 1.5, label: 'Recovery' },
+            { pattern: /(peace|ceasefire|agreement|deal|resolution)/i, weight: 1.5, label: 'Peace deal' },
+            { pattern: /(gold|bullion|xau).*(fall|drop|decline|slip|slide|tumble)/i, weight: 3, label: 'Gold turun' },
+            { pattern: /(sell|bearish|downside|resistance).*(gold|xau)/i, weight: 2, label: 'Sell gold' },
+            { pattern: /(profit.?taking|correction|pullback)/i, weight: 1.5, label: 'Profit taking' },
         ];
 
-        function keywordSentiment(text) {
-            const lower = text.toLowerCase();
-            let bull = 0, bear = 0;
+        // Filter relevansi XAUUSD
+        const RELEVANCE_PATTERNS = [
+            /gold/i, /xau/i, /bullion/i, /precious metal/i,
+            /fed/i, /federal reserve/i, /fomc/i, /powell/i,
+            /dollar/i, /usd/i, /dxy/i,
+            /inflation/i, /cpi/i, /pce/i, /ppi/i,
+            /rate/i, /yield/i, /treasury/i,
+            /geopolitic/i, /war/i, /conflict/i, /tension/i, /crisis/i,
+            /recession/i, /slowdown/i,
+            /safe.?haven/i, /risk/i,
+            /central bank/i, /reserve/i
+        ];
 
-            BULLISH_KEYWORDS.forEach(kw => { if (lower.includes(kw)) bull++; });
-            BEARISH_KEYWORDS.forEach(kw => { if (lower.includes(kw)) bear++; });
+        // ===== SCORE CALCULATION =====
+        function scoreNews(title, description) {
+            const text = title + ' ' + description;
+            let score = 0;
+            let reasons = [];
 
-            if (bull > bear) return { label: 'positive', score: Math.min(bull / 3, 1), numericScore: Math.min(bull / 3, 1) };
-            if (bear > bull) return { label: 'negative', score: Math.min(bear / 3, 1), numericScore: -Math.min(bear / 3, 1) };
-            return { label: 'neutral', score: 0.5, numericScore: 0 };
+            // Cek bullish patterns
+            BULLISH_PATTERNS.forEach(({ pattern, weight, label }) => {
+                if (pattern.test(text)) {
+                    score += weight;
+                    reasons.push(`+${weight} ${label}`);
+                }
+            });
+
+            // Cek bearish patterns
+            BEARISH_PATTERNS.forEach(({ pattern, weight, label }) => {
+                if (pattern.test(text)) {
+                    score -= weight;
+                    reasons.push(`-${weight} ${label}`);
+                }
+            });
+
+            return { score, reasons };
         }
 
-        // ===== LOAD MODEL =====
-        async function loadModel() {
-            const statusEl = document.getElementById('modelStatus');
+        function isRelevant(title, description) {
+            const text = title + ' ' + description;
+            return RELEVANCE_PATTERNS.some(p => p.test(text));
+        }
 
+        // ===== FETCH PRICE =====
+        async function fetchPrice() {
             try {
-                statusEl.innerHTML = '<span class="loading-spinner"></span>Memuat FinBERT ONNX...';
+                const response = await fetch('https://xaus.com/api/v1/spot');
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                const data = await response.json();
+                const price = data.price || data.data?.price;
 
-                // Dynamic import
-                const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+                if (price) {
+                    currentPrice = price;
+                    document.getElementById('livePrice').textContent = '$' + price.toFixed(2);
 
-                env.allowLocalModels = false;
-                env.useBrowserCache = true;
+                    const change = data.change_24h || data.data?.change_24h || 0;
+                    const changePct = data.change_percent_24h || data.data?.change_percent_24h || 0;
+                    priceChangePct = changePct;
 
-                // Pakai Xenova/finbert - versi ONNX yang work
-                sentimentPipeline = await pipeline(
-                    'sentiment-analysis',
-                    'Xenova/finbert',
-                    { quantized: true }
-                );
+                    const changeEl = document.getElementById('priceChange');
+                    const isUp = change >= 0;
+                    changeEl.textContent = `${isUp ? '▲' : '▼'} $${Math.abs(change).toFixed(2)} (${Math.abs(changePct).toFixed(2)}%)`;
+                    changeEl.className = 'price-value ' + (isUp ? 'up' : 'down');
 
-                modelReady = true;
-                statusEl.textContent = '✓ FinBERT siap';
-                statusEl.className = 'model-status ready';
-                document.getElementById('refreshBtn').disabled = false;
-
-                // Auto-run
-                runAnalysis();
-
-            } catch (error) {
-                console.error('Model load error:', error);
-                
-                // Fallback ke keyword matching
-                useFallback = true;
-                modelReady = true;
-                statusEl.textContent = '⚠ Model gagal load, pakai keyword analysis (fallback)';
-                statusEl.className = 'model-status fallback';
-                document.getElementById('refreshBtn').disabled = false;
-
-                // Auto-run dengan fallback
-                runAnalysis();
+                    const biasEl = document.getElementById('priceBias');
+                    if (changePct > 0.5) {
+                        biasEl.textContent = 'Bullish';
+                        biasEl.className = 'price-value up';
+                    } else if (changePct < -0.5) {
+                        biasEl.textContent = 'Bearish';
+                        biasEl.className = 'price-value down';
+                    } else {
+                        biasEl.textContent = 'Sideways';
+                        biasEl.className = 'price-value';
+                    }
+                }
+            } catch (e) {
+                console.warn('Price fetch error:', e);
+                document.getElementById('livePrice').textContent = '—';
             }
         }
 
         // ===== FETCH NEWS =====
         async function fetchNews() {
-            const container = document.getElementById('newsContainer');
-            container.innerHTML = '<div style="text-align:center;color:#666;padding:20px;">Memuat berita...</div>';
-
             const feeds = [
                 { name: 'Reuters', url: 'https://feeds.reuters.com/reuters/businessNews' },
                 { name: 'FXStreet', url: 'https://www.fxstreet.com/rss/news' },
@@ -269,165 +343,142 @@
 
             for (const feed of feeds) {
                 try {
-                    const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feed.url)}&count=10`;
+                    const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feed.url)}&count=15`;
                     const response = await fetch(apiUrl);
                     if (!response.ok) continue;
-
                     const data = await response.json();
                     if (data.status === 'ok' && data.items) {
                         data.items.forEach(item => {
                             allNews.push({
                                 title: item.title,
-                                description: item.description || '',
+                                description: (item.description || '').replace(/<[^>]*>/g, ''),
                                 link: item.link,
                                 pubDate: item.pubDate,
-                                source: feed.name,
-                                sentiment: null,
-                                score: 0,
-                                numericScore: 0
+                                source: feed.name
                             });
                         });
                     }
                 } catch (e) {
-                    console.warn(`Failed ${feed.name}:`, e);
+                    console.warn('Feed error:', e);
                 }
             }
 
-            if (allNews.length === 0) {
-                container.innerHTML = '<div style="text-align:center;color:#e04040;padding:20px;">Gagal load berita. Cek koneksi.</div>';
+            return allNews;
+        }
+
+        // ===== ANALYZE =====
+        async function runAnalysis() {
+            const statusEl = document.getElementById('modelStatus');
+            const signalBox = document.getElementById('signalBox');
+            const signalValue = document.getElementById('signalValue');
+            const signalConfidence = document.getElementById('signalConfidence');
+            const signalReason = document.getElementById('signalReason');
+            const newsContainer = document.getElementById('newsContainer');
+
+            statusEl.innerHTML = '<span class="loading-spinner"></span>Menganalisis...';
+            statusEl.className = 'model-status loading';
+
+            // Fetch price + news
+            await fetchPrice();
+            const allNews = await fetchNews();
+
+            // Filter relevan
+            const relevant = allNews.filter(n => isRelevant(n.title, n.description));
+
+            if (relevant.length === 0) {
+                newsContainer.innerHTML = '<div style="text-align:center;color:#e04040;padding:20px;">Tidak ada berita relevan XAUUSD.</div>';
+                statusEl.textContent = '⚠ Tidak ada berita relevan';
+                statusEl.className = 'model-status fallback';
                 return;
             }
 
-            // Filter relevan
-            const relevantKeywords = ['gold', 'xau', 'fed', 'dollar', 'inflation', 'rate',
-                                       'yield', 'economy', 'market', 'trade', 'geopolitic',
-                                       'war', 'crisis', 'recession', 'metal', 'commodity'];
+            // Score setiap berita
+            let totalScore = 0;
+            let allReasons = [];
 
-            const relevantNews = allNews.filter(item => {
-                const text = (item.title + ' ' + item.description).toLowerCase();
-                return relevantKeywords.some(kw => text.includes(kw));
+            relevant.forEach(item => {
+                const { score, reasons } = scoreNews(item.title, item.description);
+                item.score = score;
+                item.reasons = reasons;
+                totalScore += score;
+                allReasons.push(...reasons);
             });
 
-            const newsToAnalyze = relevantNews.length > 0 ? relevantNews : allNews;
+            // Normalisasi skor
+            const avgScore = totalScore / relevant.length;
 
-            // Analisis sentimen
-            await analyzeSentiment(newsToAnalyze);
+            // Gabung dengan price momentum
+            let priceScore = 0;
+            if (priceChangePct > 1) priceScore = 2;
+            else if (priceChangePct > 0.5) priceScore = 1;
+            else if (priceChangePct < -1) priceScore = -2;
+            else if (priceChangePct < -0.5) priceScore = -1;
 
-            // Render
-            renderNews(newsToAnalyze);
+            // Total: news 70%, price 30%
+            const finalScore = (avgScore * 0.7) + (priceScore * 0.3);
 
             // Generate signal
-            generateSignal(newsToAnalyze);
-        }
+            let signal, confidence;
 
-        // ===== ANALYZE SENTIMENT =====
-        async function analyzeSentiment(newsItems) {
-            for (const item of newsItems) {
-                const text = (item.title + '. ' + item.description).substring(0, 500);
-
-                if (useFallback || !sentimentPipeline) {
-                    // Pakai keyword matching
-                    const result = keywordSentiment(text);
-                    item.sentiment = result.label;
-                    item.score = result.score;
-                    item.numericScore = result.numericScore;
-                } else {
-                    try {
-                        const result = await sentimentPipeline(text);
-                        const sentiment = result[0];
-
-                        item.sentiment = sentiment.label;
-                        item.score = sentiment.score;
-
-                        if (sentiment.label === 'positive') {
-                            item.numericScore = sentiment.score;
-                        } else if (sentiment.label === 'negative') {
-                            item.numericScore = -sentiment.score;
-                        } else {
-                            item.numericScore = 0;
-                        }
-                    } catch (e) {
-                        // Fallback per item
-                        const result = keywordSentiment(text);
-                        item.sentiment = result.label;
-                        item.score = result.score;
-                        item.numericScore = result.numericScore;
-                    }
-                }
+            if (finalScore >= 0.8) {
+                signal = 'BUY';
+                confidence = Math.min(Math.round(50 + finalScore * 15), 95);
+            } else if (finalScore <= -0.8) {
+                signal = 'SELL';
+                confidence = Math.min(Math.round(50 + Math.abs(finalScore) * 15), 95);
+            } else if (finalScore > 0.2) {
+                signal = 'WEAK BUY';
+                confidence = Math.round(40 + finalScore * 20);
+            } else if (finalScore < -0.2) {
+                signal = 'WEAK SELL';
+                confidence = Math.round(40 + Math.abs(finalScore) * 20);
+            } else {
+                signal = 'NEUTRAL';
+                confidence = Math.round(60 - Math.abs(finalScore) * 30);
             }
-        }
 
-        // ===== RENDER NEWS =====
-        function renderNews(newsItems) {
-            const container = document.getElementById('newsContainer');
+            // Update UI
+            const signalClass = signal.includes('BUY') ? 'buy' : signal.includes('SELL') ? 'sell' : 'neutral';
+            signalBox.className = `signal-box ${signalClass}`;
+            signalValue.textContent = signal;
+            signalValue.className = `signal-value ${signalClass}`;
+            signalConfidence.textContent = `Confidence: ${confidence}% · ${relevant.length} berita relevan`;
 
-            container.innerHTML = newsItems.slice(0, 20).map(item => {
-                const sentiment = item.sentiment || 'neutral';
-                const score = item.numericScore || 0;
-                const scorePercent = Math.abs(score) * 100;
+            // Reason summary
+            const uniqueReasons = [...new Set(allReasons)].slice(0, 5);
+            signalReason.textContent = uniqueReasons.length > 0
+                ? 'Faktor: ' + uniqueReasons.join(', ')
+                : 'Tidak ada faktor dominan.';
 
+            // Render news
+            newsContainer.innerHTML = relevant.slice(0, 15).map(item => {
+                const score = item.score;
+                const label = score > 1 ? 'BULLISH' : score < -1 ? 'BEARISH' : 'NEUTRAL';
+                const cls = score > 1 ? 'positive' : score < -1 ? 'negative' : 'neutral';
                 return `
                     <div class="news-item">
                         <div class="news-title">${item.title}</div>
                         <div class="news-meta">
-                            <span class="sentiment-badge ${sentiment}">${sentiment}</span>
-                            <span>${(score * 100).toFixed(0)}%</span>
+                            <span class="sentiment-badge ${cls}">${label}</span>
+                            <span>Skor: ${score > 0 ? '+' : ''}${score.toFixed(1)}</span>
                             <span>· ${item.source}</span>
                         </div>
                     </div>
                 `;
             }).join('');
-        }
 
-        // ===== GENERATE SIGNAL =====
-        function generateSignal(newsItems) {
-            const signalBox = document.getElementById('signalBox');
-            const signalValue = document.getElementById('signalValue');
-            const signalConfidence = document.getElementById('signalConfidence');
-
-            const validItems = newsItems.filter(item => item.numericScore !== undefined);
-            if (validItems.length === 0) {
-                signalValue.textContent = '—';
-                signalConfidence.textContent = 'Tidak ada data';
-                return;
-            }
-
-            const avgScore = validItems.reduce((sum, item) => sum + item.numericScore, 0) / validItems.length;
-
-            const positiveCount = validItems.filter(i => i.numericScore > 0.1).length;
-            const negativeCount = validItems.filter(i => i.numericScore < -0.1).length;
-            const total = validItems.length;
-
-            const consistency = Math.abs(positiveCount - negativeCount) / total;
-
-            let signal, confidence;
-
-            if (avgScore > 0.15) {
-                signal = 'BUY';
-                confidence = Math.min(Math.round(avgScore * 100 + consistency * 30), 95);
-            } else if (avgScore < -0.15) {
-                signal = 'SELL';
-                confidence = Math.min(Math.round(Math.abs(avgScore) * 100 + consistency * 30), 95);
-            } else {
-                signal = 'NEUTRAL';
-                confidence = Math.round((1 - Math.abs(avgScore)) * 100);
-            }
-
-            signalBox.className = `signal-box ${signal.toLowerCase()}`;
-            signalValue.textContent = signal;
-            signalValue.className = `signal-value ${signal.toLowerCase()}`;
-            signalConfidence.textContent = `Confidence: ${confidence}% · ${validItems.length} berita${useFallback ? ' (keyword mode)' : ''}`;
-        }
-
-        // ===== RUN ANALYSIS =====
-        async function runAnalysis() {
-            if (!modelReady) return;
-            await fetchNews();
+            // Status
+            statusEl.textContent = '✓ Analisis selesai';
+            statusEl.className = 'model-status ready';
         }
 
         // ===== INIT =====
         window.runAnalysis = runAnalysis;
-        document.addEventListener('DOMContentLoaded', loadModel);
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('refreshBtn').disabled = false;
+            runAnalysis();
+            setInterval(runAnalysis, 300000); // 5 menit
+        });
     </script>
 </body>
 </html>
